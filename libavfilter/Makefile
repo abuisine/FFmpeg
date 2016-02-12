@@ -23,6 +23,7 @@ OBJS = allfilters.o                                                     \
        graphdump.o                                                      \
        graphparser.o                                                    \
        opencl_allkernels.o                                              \
+       transform.o														\
        video.o                                                          \
 
 
