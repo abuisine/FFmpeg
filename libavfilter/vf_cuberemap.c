@@ -12,35 +12,10 @@
  */
 
 #include "libavutil/avassert.h"
-#include "libavutil/avstring.h"
-#include "libavutil/eval.h"
-#include "libavutil/imgutils.h"
-#include "libavutil/internal.h"
 #include "libavutil/opt.h"
-#include "libavutil/mem.h"
-#include "libavutil/parseutils.h"
 #include "avfilter.h"
 #include "internal.h"
 #include "video.h"
-
-
-static const char *const var_names[] = {
-    "out_w",  "ow",
-    "out_h",  "oh",
-    NULL
-};
-
-enum var_name {
-    VAR_OUT_W, VAR_OW,
-    VAR_OUT_H, VAR_OH,
-    VARS_NB
-};
-
-/*
-   MMMMT
-   MMMMB
-   */
-#define MAIN_PLANE_WIDTH (8.0f / 9.0f)
 
 #define RIGHT   0
 #define LEFT    1
@@ -49,61 +24,31 @@ enum var_name {
 #define FRONT   4
 #define BACK    5
 
-#define UNPACK_ID(pair) ((pair) >> 6)
-#define UNPACK_COUNT(pair) ((uint8_t) (pair) & 0x3F)
-#define PACK_PAIR(id, count) (((id) << 6) ^ (count))
+typedef enum InputLayout {
+    INPUT_LAYOUT_CUBEMAP,
+    INPUT_LAYOUT_CUBEMAP_32,
+    INPUT_LAYOUT_CUBEMAP_180,
+    INPUT_LAYOUT_PLANE_POLES,
+    INPUT_LAYOUT_PLANE_POLES_6,
+    INPUT_LAYOUT_PLANE_POLES_CUBEMAP,
+    INPUT_LAYOUT_PLANE_CUBEMAP,
+    INPUT_LAYOUT_PLANE_CUBEMAP_32,
 
-#define SOFTWARE_PREFETCH_OPT
+    INPUT_LAYOUT_N
+} InputLayout;
 
-static const int INITIAL_PAIR_SIZE = 2;
+typedef enum OutputLayout {
+    OUTPUT_LAYOUT_CUBEMAP,
+    OUTPUT_LAYOUT_CUBEMAP_32,
+    OUTPUT_LAYOUT_CUBEMAP_180,
+    OUTPUT_LAYOUT_PLANE_POLES,
+    OUTPUT_LAYOUT_PLANE_POLES_6,
+    OUTPUT_LAYOUT_PLANE_POLES_CUBEMAP,
+    OUTPUT_LAYOUT_PLANE_CUBEMAP,
+    OUTPUT_LAYOUT_PLANE_CUBEMAP_32,
 
-static const float PH = 0.25f;
-
-static const float YC_TOP = 0.75f;
-static const float YC_BOTTOM = 0.25f;
-
-static const float Y_HALF = 1.0f / 2.0f;
-static const float X_HALF = 1.0f / 2.0f;
-
-// cube transform parameters
-static const float P0[] = {-0.5f,-0.5f,-0.5f };
-static const float P1[] = { 0.5f,-0.5f,-0.5f };
-static const float P4[] = {-0.5f,-0.5f, 0.5f };
-static const float P5[] = { 0.5f,-0.5f, 0.5f };
-static const float P6[] = {-0.5f, 0.5f, 0.5f };
-
-static const float PX[] = { 1.0f, 0.0f, 0.0f};
-static const float PY[] = { 0.0f, 1.0f, 0.0f};
-static const float PZ[] = { 0.0f, 0.0f, 1.0f};
-static const float NX[] = {-1.0f, 0.0f, 0.0f};
-static const float NZ[] = { 0.0f, 0.0f,-1.0f};
-
-static const int PLANE_POLES_FACE_MAP[] = {1, 4, 0, 5, 2, 3};
-static const int PLANE_CUBEMAP_FACE_MAP[] = {1, 4, 0, 5, 2, 3};
-static const int PLANE_CUBEMAP_32_FACE_MAP[] = {1, 4, 0, 5, 3, 2};
-
-typedef enum StereoFormat {
-    STEREO_FORMAT_TB,
-    STEREO_FORMAT_LR,
-    STEREO_FORMAT_MONO,
-    STEREO_FORMAT_GUESS,
-
-    STEREO_FORMAT_N
-} StereoFormat;
-
-typedef enum Layout {
-    LAYOUT_CUBEMAP,
-    LAYOUT_CUBEMAP_32,
-    LAYOUT_CUBEMAP_180,
-    LAYOUT_PLANE_POLES,
-    LAYOUT_PLANE_POLES_6,
-    LAYOUT_PLANE_POLES_CUBEMAP,
-    LAYOUT_PLANE_CUBEMAP,
-    LAYOUT_PLANE_CUBEMAP_32,
-    LAYOUT_FLAT_FIXED,
-
-    LAYOUT_N
-} Layout;
+    OUTPUT_LAYOUT_N
+} OutputLayour;
 
 typedef struct TransformPixelWeights {
     uint32_t *pairs;
@@ -900,53 +845,24 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 
 static const AVOption transform_options[] = {
-    { "w",             "Output video width",          OFFSET(w_expr),    AV_OPT_TYPE_STRING,        .flags = FLAGS },
-    { "width",         "Output video width",          OFFSET(w_expr),    AV_OPT_TYPE_STRING,        .flags = FLAGS },
-    { "h",             "Output video height",         OFFSET(h_expr),    AV_OPT_TYPE_STRING,        .flags = FLAGS },
-    { "height",        "Output video height",         OFFSET(h_expr),    AV_OPT_TYPE_STRING,        .flags = FLAGS },
-    { "size",          "set video size",              OFFSET(size_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, FLAGS },
-    { "s",             "set video size",              OFFSET(size_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, FLAGS },
-    { "cube_edge_length", "Length of a cube edge (for cubic transform, overrides w and h, default 0 for off)",         OFFSET(cube_edge_length),    AV_OPT_TYPE_INT,  {.i64 = 0}, 0, 16384,  .flags = FLAGS },
-    { "max_cube_edge_length", "Max length of a cube edge (for cubic transform, overrides w, h, and cube_edge_length, default 0 for off)",   OFFSET(max_cube_edge_length),    AV_OPT_TYPE_INT,  {.i64 = 0}, 0, 16384,  .flags = FLAGS },
-    { "input_stereo_format", "Input video stereo format",         OFFSET(input_stereo_format),    AV_OPT_TYPE_INT,  {.i64 = STEREO_FORMAT_GUESS }, 0, STEREO_FORMAT_N - 1,  .flags = FLAGS, "stereo_format" },
-    { "TB",      NULL, 0, AV_OPT_TYPE_CONST, {.i64 = STEREO_FORMAT_TB },      0, 0, FLAGS, "stereo_format" },
-    { "LR",      NULL, 0, AV_OPT_TYPE_CONST, {.i64 = STEREO_FORMAT_LR },      0, 0, FLAGS, "stereo_format" },
-    { "MONO",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = STEREO_FORMAT_MONO },    0, 0, FLAGS, "stereo_format" },
-    { "GUESS",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = STEREO_FORMAT_GUESS },   0, 0, FLAGS, "stereo_format" },
-    { "tb",      NULL, 0, AV_OPT_TYPE_CONST, {.i64 = STEREO_FORMAT_TB },      0, 0, FLAGS, "stereo_format" },
-    { "lr",      NULL, 0, AV_OPT_TYPE_CONST, {.i64 = STEREO_FORMAT_LR },      0, 0, FLAGS, "stereo_format" },
-    { "mono",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = STEREO_FORMAT_MONO },    0, 0, FLAGS, "stereo_format" },
-    { "guess",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = STEREO_FORMAT_GUESS },   0, 0, FLAGS, "stereo_format" },
-    { "output_layout", "Output video layout format",         OFFSET(output_layout),    AV_OPT_TYPE_INT,  {.i64 = LAYOUT_CUBEMAP_32 }, 0, LAYOUT_N - 1,  .flags = FLAGS, "layout" },
-    { "CUBEMAP",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP },             0, 0, FLAGS, "layout" },
-    { "CUBEMAP_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "layout" },
-    { "CUBEMAP_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "layout" },
-    { "PLANE_POLES",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES },         0, 0, FLAGS, "layout" },
-    { "PLANE_POLES_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "layout" },
-    { "PLANE_POLES_CUBEMAP", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "layout" },
-    { "PLANE_CUBEMAP",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "layout" },
-    { "PLANE_CUBEMAP_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "layout" },
-    { "FLAT_FIXED",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_FLAT_FIXED },          0, 0, FLAGS, "layout" },
-    { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP },             0, 0, FLAGS, "layout" },
-    { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "layout" },
-    { "cubemap_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "layout" },
-    { "plane_poles",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES },         0, 0, FLAGS, "layout" },
-    { "plane_poles_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "layout" },
-    { "plane_poles_cubemap", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "layout" },
-    { "plane_cubemap",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "layout" },
-    { "plane_cubemap_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "layout" },
-    { "flat_fixed",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_FLAT_FIXED },          0, 0, FLAGS, "layout" },
-    { "vflip", "Output video 2nd eye vertical flip (true, false)",         OFFSET(vflip),    AV_OPT_TYPE_INT, {.i64 = 0 }, 0, 1,     .flags = FLAGS, "vflip" },
-    { "false",  NULL, 0, AV_OPT_TYPE_CONST, {.i64 = 0 }, 0, 0, FLAGS, "vflip" },
-    { "true",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = 1 }, 0, 0, FLAGS, "vflip" },
-    { "main_plane_ratio", "Output video main plain ratio for PLANE_POLES format (0.88888)",         OFFSET(main_plane_ratio),    AV_OPT_TYPE_FLOAT,  {.dbl=MAIN_PLANE_WIDTH}, 0, 1,  .flags = FLAGS },
-    { "expand_coef", "Expansion coeffiecient for each face in cubemap (default 1.01)",         OFFSET(expand_coef),    AV_OPT_TYPE_FLOAT,  {.dbl=1.01f}, 0, 10,  .flags = FLAGS },
-    { "w_subdivisons", "Number of horizontal per-pixel subdivisions for better downsampling (default 8)",         OFFSET(w_subdivisons),    AV_OPT_TYPE_INT,  {.i64 = 8}, 1, 8,  .flags = FLAGS },
-    { "h_subdivisons", "Number of vertical per-pixel subdivisions for better downsampling (default 8)",         OFFSET(h_subdivisons),    AV_OPT_TYPE_INT,  {.i64 = 8}, 1, 8,  .flags = FLAGS },
-    { "yaw", "View orientation for flat_fixed projection, degrees",   OFFSET(fixed_yaw),          AV_OPT_TYPE_FLOAT,   {.dbl =   0.0}, -360, 360,  .flags = FLAGS },
-    { "pitch", "View orientation for flat_fixed projection, degrees", OFFSET(fixed_pitch),        AV_OPT_TYPE_FLOAT,   {.dbl =   0.0},  -90,  90,  .flags = FLAGS },
-    { "hfov", "Horizontal field of view for flat_fixed projection, degrees (default 120)",  OFFSET(fixed_hfov), AV_OPT_TYPE_FLOAT,   {.dbl = 120.0}, -360, 360,  .flags = FLAGS },
-    { "vfov", "Vertical field of view for flat_fixed projection, degrees (default 110)",     OFFSET(fixed_vfov), AV_OPT_TYPE_FLOAT,   {.dbl = 110.0}, -180, 180,  .flags = FLAGS },
+    { "input_layout", "Input video layout format",         OFFSET(input_layout),    AV_OPT_TYPE_INT,  {.i64 = INPUT_LAYOUT_CUBEMAP }, 0, INPUT_LAYOUT_N - 1,  .flags = FLAGS, "input_format" },
+    { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_CUBEMAP },             0, 0, FLAGS, "input_layout" },
+    { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "input_layout" },
+    { "cubemap_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "input_layout" },
+    { "plane_poles",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_POLES },         0, 0, FLAGS, "input_layout" },
+    { "plane_poles_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "input_layout" },
+    { "plane_poles_cubemap", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "input_layout" },
+    { "plane_cubemap",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "input_layout" },
+    { "plane_cubemap_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "input_layout" },
+    { "output_layout", "Output video layout format",         OFFSET(output_layout),    AV_OPT_TYPE_INT,  {.i64 = OUTPUT_LAYOUT_CUBEMAP_32 }, 0, OUTPUT_LAYOUT_N - 1,  .flags = FLAGS, "output_layout" },
+    { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_CUBEMAP },             0, 0, FLAGS, "output_layout" },
+    { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "output_layout" },
+    { "cubemap_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "output_layout" },
+    { "plane_poles",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_POLES },         0, 0, FLAGS, "output_layout" },
+    { "plane_poles_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "output_layout" },
+    { "plane_poles_cubemap", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "output_layout" },
+    { "plane_cubemap",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "output_layout" },
+    { "plane_cubemap_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "output_layout" },
     { NULL }
 };
 
@@ -976,9 +892,9 @@ static const AVFilterPad avfilter_vf_transform_outputs[] = {
     { NULL }
 };
 
-AVFilter ff_vf_transform = {
-    .name        = "transform",
-    .description = NULL_IF_CONFIG_SMALL("Transforms equirectangular input video to the other format."),
+AVFilter ff_vf_cuberemap = {
+    .name        = "cuberemap",
+    .description = NULL_IF_CONFIG_SMALL("Remaps a cubemap."),
     .init_dict   = init_dict,
     .uninit      = uninit,
     .priv_size   = sizeof(TransformContext),
