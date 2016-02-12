@@ -25,7 +25,10 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/opt.h"
+#include "libavutil/pixdesc.h"
+#include "libavutil/imgutils.h"
 #include "avfilter.h"
+#include "formats.h"
 #include "internal.h"
 #include "video.h"
 
@@ -60,12 +63,28 @@ typedef enum OutputLayout {
     OUTPUT_LAYOUT_PLANE_CUBEMAP_32,
 
     OUTPUT_LAYOUT_N
-} OutputLayour;
+} OutputLayout;
+
+typedef struct CubeFace {
+    int x;
+    int y;
+    int w;
+    int h;
+} CubeFace;
 
 typedef struct CuberemapContext {
     const AVClass *class;
+    CubeFace faces;
+    int width, height;
+    int nb_faces;
+    int nb_planes;
+    int linesize[4];
+    int pixstep[4];
+    int pheight[4];
+    int hsub, vsub;
     int input_layout;
     int output_layout;
+    int in_off_left[4], in_off_right[4];
 } CuberemapContext;
 
 #define OFFSET(x) offsetof(CuberemapContext, x)
@@ -98,13 +117,38 @@ static av_cold int init(AVFilterContext *ctx)
 {
     CuberemapContext *cuberemap = ctx->priv;
 
+    cuberemap->nb_faces = 1;
+
     return 0;
 }
 
-static int config_props(AVFilterLink *inlink)
+static av_cold void uninit(AVFilterContext *ctx)
 {
-    AVFilterContext *ctx = inlink->dst;
     CuberemapContext *cuberemap = ctx->priv;
+
+}
+
+static int config_output(AVFilterLink *outlink)
+{
+    AVFilterContext *ctx = outlink->src;
+    AVFilterLink *inlink = ctx->inputs[0];
+    CuberemapContext *cuberemap = ctx->priv;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(outlink->format);
+    int ret;
+
+    cuberemap->width = inlink->w;
+    cuberemap->height = inlink->h / 2;
+    outlink->w = cuberemap->width;
+    outlink->h = cuberemap->height;
+
+    if ((ret = av_image_fill_linesizes(cuberemap->linesize, outlink->format, cuberemap->width)) < 0)
+        return ret;
+    cuberemap->nb_planes = av_pix_fmt_count_planes(outlink->format);
+    av_image_fill_max_pixsteps(cuberemap->pixstep, NULL, desc);
+    cuberemap->pheight[1] = cuberemap->pheight[2] = FF_CEIL_RSHIFT(cuberemap->height, desc->log2_chroma_h);
+    cuberemap->pheight[0] = cuberemap->pheight[3] = cuberemap->height;
+    cuberemap->hsub = desc->log2_chroma_w;
+    cuberemap->vsub = desc->log2_chroma_h;
 
     return 0;
 }
@@ -115,7 +159,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     CuberemapContext *cuberemap = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out;
-    int direct = 0;
+    int out_off_left[4], out_off_right[4];
+    int i, direct = 0;
 
     if (av_frame_is_writable(in)) {
         direct = 1;
@@ -131,22 +176,37 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     // do the stuff
 
+    for (i = 0; i < 4; i++) {
+        int hsub = i == 1 || i == 2 ? cuberemap->hsub : 0;
+        int vsub = i == 1 || i == 2 ? cuberemap->vsub : 0;
+        cuberemap->in_off_right[i]  =
+            (FF_CEIL_RSHIFT(50,  vsub) + 0)
+            * in->linesize[i] + FF_CEIL_RSHIFT(0  * cuberemap->pixstep[i], hsub);
+        out_off_right[i] =
+            (FF_CEIL_RSHIFT(50, vsub) + 0)
+            * out->linesize[i] + FF_CEIL_RSHIFT(0 * cuberemap->pixstep[i], hsub);
+    }
+
+    for (i = 0; i < cuberemap->nb_planes; i++) {
+        av_image_copy_plane(out->data[i] + out_off_right[i],
+                            out->linesize[i],
+                            in->data[i] + cuberemap->in_off_right[i],
+                            in->linesize[i],
+                            cuberemap->linesize[i], cuberemap->pheight[i] / 2);
+        // av_image_copy_plane(out->data[i], out->linesize[i],
+        //                     in->data[i], in->linesize[i],
+        //                     cuberemap->linesize[i], cuberemap->pheight[i]);
+    }
+
     if (!direct)
         av_frame_free(&in);
     return ff_filter_frame(outlink, out);
-}
-
-static av_cold void uninit(AVFilterContext *ctx)
-{
-    CuberemapContext *cuberemap = ctx->priv;
-
 }
 
 static const AVFilterPad avfilter_vf_cuberemap_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
-        .config_props = config_props,
         .filter_frame = filter_frame,
     },
     { NULL }
@@ -156,6 +216,7 @@ static const AVFilterPad avfilter_vf_cuberemap_outputs[] = {
     {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
+        .config_props = config_output,
     },
     { NULL }
 };
