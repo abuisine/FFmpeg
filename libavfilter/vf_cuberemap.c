@@ -1,14 +1,26 @@
-/**
- * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
+/*
+ * Copyright (c) 2016 Alexandre Buisine <alexandrejabuisine@gmail.com>
  *
- * This source code is licensed under the license found in the
- * LICENSE file in the root directory of this source tree.
+ * This file is part of FFmpeg.
+ *
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * FFmpeg is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 /**
  * @file
- * transform video filter
+ * Cubemap remapping filter
  */
 
 #include "libavutil/avassert.h"
@@ -85,15 +97,51 @@ typedef struct TransformContext {
     float fixed_vfov;   ///< Vertical field of view, degrees
 } TransformContext;
 
-typedef struct ThreadData {
-    TransformPlaneMap *p;
-    int subs;
-    int linesize;
-    int num_tiles;
-    int num_tiles_col;
-    uint8_t* in_data;
-    uint8_t* out_data;
-} ThreadData;
+#define OFFSET(x) offsetof(CuberemapContext, x)
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+
+static const AVOption cuberemap_options[] = {
+    { "input_layout", "Input video layout format",         OFFSET(input_layout),    AV_OPT_TYPE_INT,  {.i64 = INPUT_LAYOUT_CUBEMAP }, 0, INPUT_LAYOUT_N - 1,  .flags = FLAGS, "input_format" },
+    { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_CUBEMAP },             0, 0, FLAGS, "input_layout" },
+    { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "input_layout" },
+    { "cubemap_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "input_layout" },
+    { "plane_poles",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_POLES },         0, 0, FLAGS, "input_layout" },
+    { "plane_poles_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "input_layout" },
+    { "plane_poles_cubemap", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "input_layout" },
+    { "plane_cubemap",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "input_layout" },
+    { "plane_cubemap_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "input_layout" },
+    { "output_layout", "Output video layout format",         OFFSET(output_layout),    AV_OPT_TYPE_INT,  {.i64 = OUTPUT_LAYOUT_CUBEMAP_32 }, 0, OUTPUT_LAYOUT_N - 1,  .flags = FLAGS, "output_layout" },
+    { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_CUBEMAP },             0, 0, FLAGS, "output_layout" },
+    { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "output_layout" },
+    { "cubemap_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "output_layout" },
+    { "plane_poles",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_POLES },         0, 0, FLAGS, "output_layout" },
+    { "plane_poles_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "output_layout" },
+    { "plane_poles_cubemap", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "output_layout" },
+    { "plane_cubemap",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "output_layout" },
+    { "plane_cubemap_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "output_layout" },
+    { NULL }
+};
+
+AVFILTER_DEFINE_CLASS(edgedetect);
+
+static int config_props(AVFilterLink *inlink)
+{
+    int p;
+    AVFilterContext *ctx = inlink->dst;
+    EdgeDetectContext *edgedetect = ctx->priv;
+
+    edgedetect->nb_planes = inlink->format == AV_PIX_FMT_GRAY8 ? 1 : 3;
+    for (p = 0; p < edgedetect->nb_planes; p++) {
+        struct plane_info *plane = &edgedetect->planes[p];
+
+        plane->tmpbuf     = av_malloc(inlink->w * inlink->h);
+        plane->gradients  = av_calloc(inlink->w * inlink->h, sizeof(*plane->gradients));
+        plane->directions = av_malloc(inlink->w * inlink->h);
+        if (!plane->tmpbuf || !plane->gradients || !plane->directions)
+            return AVERROR(ENOMEM);
+    }
+    return 0;
+}
 
 // We need to end up with X and Y coordinates in the range [0..1).
 // Horizontally wrapping is easy: 1.25 becomes 0.25, -0.25 becomes 0.75.
@@ -499,104 +547,7 @@ static inline int generate_map(TransformContext *s,
     return 0;
 }
 
-static int config_output(AVFilterLink *outlink)
-{
-    AVFilterContext *ctx = outlink->src;
-    AVFilterLink *inlink = outlink->src->inputs[0];
-    TransformContext *s = ctx->priv;
-    double var_values[VARS_NB], res;
-    char *expr;
-    int ret;
 
-    var_values[VAR_OUT_W] = var_values[VAR_OW] = NAN;
-    var_values[VAR_OUT_H] = var_values[VAR_OH] = NAN;
-
-    if (s->input_stereo_format == STEREO_FORMAT_GUESS) {
-        int aspect_ratio = inlink->w / inlink->h;
-        if (aspect_ratio == 1)
-            s->input_stereo_format = STEREO_FORMAT_TB;
-        else if (aspect_ratio == 4)
-            s->input_stereo_format = STEREO_FORMAT_LR;
-        else
-            s->input_stereo_format = STEREO_FORMAT_MONO;
-    }
-
-    if (s->max_cube_edge_length > 0) {
-        if (s->input_stereo_format == STEREO_FORMAT_LR) {
-            s->cube_edge_length = inlink->w / 8;
-        } else {
-            s->cube_edge_length = inlink->w / 4;
-        }
-
-        // do not exceed the max length supplied
-        if (s->cube_edge_length > s->max_cube_edge_length) {
-            s->cube_edge_length = s->max_cube_edge_length;
-        }
-    }
-
-    // ensure cube edge length is a multiple of 16 by rounding down
-    // so that macroblocks do not cross cube edge boundaries
-    s->cube_edge_length = s->cube_edge_length - (s->cube_edge_length % 16);
-
-    if (s->cube_edge_length > 0) {
-        if (s->output_layout == LAYOUT_CUBEMAP || s->output_layout == LAYOUT_PLANE_CUBEMAP) {
-            outlink->w = s->cube_edge_length * 6;
-            outlink->h = s->cube_edge_length;
-
-            if (s->input_stereo_format == STEREO_FORMAT_TB || s->input_stereo_format == STEREO_FORMAT_LR)
-                outlink->h = outlink->h * 2;
-        } else if (s->output_layout == LAYOUT_CUBEMAP_32 || s->output_layout == LAYOUT_PLANE_CUBEMAP_32) {
-            outlink->w = s->cube_edge_length * 3;
-            outlink->h = s->cube_edge_length * 2;
-
-            if (s->input_stereo_format == STEREO_FORMAT_TB || s->input_stereo_format == STEREO_FORMAT_LR)
-                outlink->h = outlink->h * 2;
-        } else if (s->output_layout == LAYOUT_CUBEMAP_180) {
-            outlink->w = s->cube_edge_length * 2.5;
-            outlink->h = s->cube_edge_length * 1.5;
-
-            if (s->input_stereo_format == STEREO_FORMAT_TB || s->input_stereo_format == STEREO_FORMAT_LR)
-                outlink->h = outlink->h * 2;
-        }
-    } else {
-        var_values[VAR_OUT_W] = var_values[VAR_OW] = NAN;
-        var_values[VAR_OUT_H] = var_values[VAR_OH] = NAN;
-
-        av_expr_parse_and_eval(&res, (expr = s->w_expr),
-                var_names, var_values,
-                NULL, NULL, NULL, NULL, NULL, 0, ctx);
-        s->w = var_values[VAR_OUT_W] = var_values[VAR_OW] = res;
-        if ((ret = av_expr_parse_and_eval(&res, (expr = s->h_expr),
-                        var_names, var_values,
-                        NULL, NULL, NULL, NULL, NULL, 0, ctx)) < 0) {
-            av_log(NULL, AV_LOG_ERROR,
-                    "Error when evaluating the expression '%s'.\n"
-                    "Maybe the expression for out_w:'%s' or for out_h:'%s' is self-referencing.\n",
-                    expr, s->w_expr, s->h_expr);
-            return ret;
-        }
-        s->h = var_values[VAR_OUT_H] = var_values[VAR_OH] = res;
-        /* evaluate again the width, as it may depend on the output height */
-        if ((ret = av_expr_parse_and_eval(&res, (expr = s->w_expr),
-                        var_names, var_values,
-                        NULL, NULL, NULL, NULL, NULL, 0, ctx)) < 0) {
-            av_log(NULL, AV_LOG_ERROR,
-                    "Error when evaluating the expression '%s'.\n"
-                    "Maybe the expression for out_w:'%s' or for out_h:'%s' is self-referencing.\n",
-                    expr, s->w_expr, s->h_expr);
-            return ret;
-        }
-        s->w = res;
-
-        outlink->w = s->w;
-        outlink->h = s->h;
-    }
-
-    av_log(ctx, AV_LOG_VERBOSE, "out_w:%d out_h:%d\n",
-            outlink->w, outlink->h);
-
-    return 0;
-}
 
 static av_cold int init_dict(AVFilterContext *ctx, AVDictionary **opts)
 {
@@ -841,31 +792,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
-#define OFFSET(x) offsetof(TransformContext, x)
-#define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
-
-static const AVOption transform_options[] = {
-    { "input_layout", "Input video layout format",         OFFSET(input_layout),    AV_OPT_TYPE_INT,  {.i64 = INPUT_LAYOUT_CUBEMAP }, 0, INPUT_LAYOUT_N - 1,  .flags = FLAGS, "input_format" },
-    { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_CUBEMAP },             0, 0, FLAGS, "input_layout" },
-    { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "input_layout" },
-    { "cubemap_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "input_layout" },
-    { "plane_poles",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_POLES },         0, 0, FLAGS, "input_layout" },
-    { "plane_poles_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "input_layout" },
-    { "plane_poles_cubemap", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "input_layout" },
-    { "plane_cubemap",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "input_layout" },
-    { "plane_cubemap_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "input_layout" },
-    { "output_layout", "Output video layout format",         OFFSET(output_layout),    AV_OPT_TYPE_INT,  {.i64 = OUTPUT_LAYOUT_CUBEMAP_32 }, 0, OUTPUT_LAYOUT_N - 1,  .flags = FLAGS, "output_layout" },
-    { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_CUBEMAP },             0, 0, FLAGS, "output_layout" },
-    { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "output_layout" },
-    { "cubemap_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "output_layout" },
-    { "plane_poles",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_POLES },         0, 0, FLAGS, "output_layout" },
-    { "plane_poles_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "output_layout" },
-    { "plane_poles_cubemap", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "output_layout" },
-    { "plane_cubemap",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "output_layout" },
-    { "plane_cubemap_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "output_layout" },
-    { NULL }
-};
-
 static const AVClass transform_class = {
     .class_name       = "transform",
     .item_name        = av_default_item_name,
@@ -878,6 +804,7 @@ static const AVFilterPad avfilter_vf_transform_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
+        .config_props = config_props,
         .filter_frame = filter_frame,
     },
     { NULL }
@@ -887,7 +814,6 @@ static const AVFilterPad avfilter_vf_transform_outputs[] = {
     {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
-        .config_props = config_output,
     },
     { NULL }
 };
