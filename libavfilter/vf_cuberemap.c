@@ -74,20 +74,23 @@ typedef struct CubeFace {
     int h;
 } CubeFace;
 
+typedef struct ChromaDisplacement {
+    int x;
+    int y;
+} ChromaDisplacement;
+
 typedef struct CuberemapContext {
     const AVClass *class;
-    CubeFace faces;
-    int width, height;
+    CubeFace faces[42]; //FIXME
     int nb_faces;
     int nb_planes;
     int linesize[4];
     int pixstep[4];
     int pheight[4];
     int sampling[4];
-    int hsub, vsub;
+    ChromaDisplacement chroma[4];
     int input_layout;
     int output_layout;
-    int in_off_left[4], in_off_right[4];
 } CuberemapContext;
 
 #define OFFSET(x) offsetof(CuberemapContext, x)
@@ -116,58 +119,108 @@ static const AVOption cuberemap_options[] = {
 
 AVFILTER_DEFINE_CLASS(cuberemap);
 
-static av_cold int init(AVFilterContext *ctx)
+static int query_formats(AVFilterContext *ctx)
 {
-    CuberemapContext *cr = ctx->priv;
-
-    cr->nb_faces = 1;
-    cr->faces.i_x = 0;
-    cr->faces.i_y = 0;
-    cr->faces.o_x = 200;
-    cr->faces.o_y = 200;
-    cr->faces.w = 400;
-    cr->faces.h = 400;
-
-    return 0;
+    static const enum AVPixelFormat pix_fmts[] = {
+        AV_PIX_FMT_YUV420P,
+        AV_PIX_FMT_YUV410P,
+        AV_PIX_FMT_YUV444P,
+        AV_PIX_FMT_YUV422P,
+        AV_PIX_FMT_YUV411P,
+        AV_PIX_FMT_NONE
+    };
+    AVFilterFormats *fmts_list = ff_make_format_list(pix_fmts);
+    if (!fmts_list)
+        return AVERROR(ENOMEM);
+    return ff_set_common_formats(ctx, fmts_list);
 }
 
-static av_cold void uninit(AVFilterContext *ctx)
-{
-    CuberemapContext *cr = ctx->priv;
+// static av_cold int init(AVFilterContext *ctx)
+// {
+//     CuberemapContext *cr = ctx->priv;
 
-}
+//     return 0;
+// }
+
+// static av_cold void uninit(AVFilterContext *ctx)
+// {
+//     CuberemapContext *cr = ctx->priv;
+// }
 
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
+    AVFilterLink *outlink = ctx->outputs[0];
     CuberemapContext *cr = ctx->priv;;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
 
-    cr->width = inlink->w;
-    cr->height = inlink->h / 2;
+    outlink->w = inlink->w;
+    outlink->h = inlink->h / 2;
 
-    return 0;
-}
-
-static int config_output(AVFilterLink *outlink)
-{
-    AVFilterContext *ctx = outlink->src;
-    CuberemapContext *cr = ctx->priv;
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(outlink->format);
     int ret;
-
-    outlink->w = cr->width;
-    outlink->h = cr->height;
-
-    if ((ret = av_image_fill_linesizes(cr->linesize, outlink->format, cr->width)) < 0)
+    if ((ret = av_image_fill_linesizes(cr->linesize, inlink->format, inlink->w)) < 0)
         return ret;
-    cr->nb_planes = av_pix_fmt_count_planes(outlink->format);
+
+    cr->nb_planes = av_pix_fmt_count_planes(inlink->format);
     av_image_fill_max_pixsteps(cr->pixstep, NULL, desc);
-    cr->pheight[1] = cr->pheight[2] = FF_CEIL_RSHIFT(cr->height, desc->log2_chroma_h);
-    cr->pheight[0] = cr->pheight[3] = cr->height;
-    cr->sampling[1] = cr->sampling[2] = desc->log2_chroma_h;
-    cr->sampling[0] = cr->sampling[3] = 1;
-    cr->hsub = desc->log2_chroma_w;
-    cr->vsub = desc->log2_chroma_h;
+    cr->chroma[0].x = 0;
+    cr->chroma[0].y = 0;
+    cr->chroma[1].x = desc->log2_chroma_w;
+    cr->chroma[1].y = desc->log2_chroma_h;
+    cr->chroma[3].x = 0;
+    cr->chroma[3].y = 0;
+    cr->chroma[2].x = desc->log2_chroma_w;
+    cr->chroma[2].y = desc->log2_chroma_h;
+
+    cr->nb_faces = 6;
+
+    // left eye = right left top
+    cr->faces[0].i_x = 0;
+    cr->faces[0].i_y = 0;
+    cr->faces[0].o_x = 0;
+    cr->faces[0].o_y = 0;
+    cr->faces[0].w = inlink->w;
+    cr->faces[0].h = inlink->h / 4;
+
+    // right eye = right left top
+    cr->faces[1].i_x = 0;
+    cr->faces[1].i_y = inlink->h / 4 * 2;
+    cr->faces[1].o_x = 0;
+    cr->faces[1].o_y = outlink->h / 2;
+    cr->faces[1].w = inlink->w;
+    cr->faces[1].h = inlink->h / 4;
+
+    // left eye = bottom
+    cr->faces[2].i_x = 0;
+    cr->faces[2].i_y = inlink->h / 4;
+    cr->faces[2].o_x = outlink->w / 3 * 2;
+    cr->faces[2].o_y = 0;
+    cr->faces[2].w = inlink->w / 3;
+    cr->faces[2].h = inlink->h / 8;
+
+    // right eye = bottom
+    cr->faces[3].i_x = 0;
+    cr->faces[3].i_y = inlink->h / 4 * 3;
+    cr->faces[3].o_x = outlink->w / 3 * 2;
+    cr->faces[3].o_y = outlink->h / 2;
+    cr->faces[3].w = inlink->w / 3;
+    cr->faces[3].h = inlink->h / 8;
+
+    // left eye = front
+    cr->faces[4].i_x = inlink->w / 3;
+    cr->faces[4].i_y = inlink->h / 4;
+    cr->faces[4].o_x = outlink->w / 6;
+    cr->faces[4].o_y = 0;
+    cr->faces[4].w = inlink->w / 3;
+    cr->faces[4].h = inlink->h / 4;
+
+    // right eye = front
+    cr->faces[5].i_x = inlink->w / 3;
+    cr->faces[5].i_y = inlink->h / 4 * 3;
+    cr->faces[5].o_x = outlink->w / 6;
+    cr->faces[5].o_y = outlink->h / 2;
+    cr->faces[5].w = inlink->w / 3;
+    cr->faces[5].h = inlink->h / 4;
 
     return 0;
 }
@@ -178,9 +231,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     CuberemapContext *cr = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out;
-    int out_off_left[4], out_off_right[4];
-    int i, direct = 0;
-    int hsub, vsub = 0;
+    int f, p, direct = 0;
 
     if (av_frame_is_writable(in)) {
         direct = 1;
@@ -194,46 +245,17 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    // do the stuff
-
-
-
-
-    // for (i = 0; i < cr->nb_planes; i++) {
-        av_image_copy_plane(out->data[0] + cr->faces.o_y * out->linesize[0] + cr->faces.o_x, out->linesize[0],
-                            in->data[0] + cr->faces.i_y * in->linesize[0], in->linesize[0],
-                            cr->faces.w, cr->faces.h);
-
-        // i = 2;
-        // hsub = cr->hsub;
-        // vsub = cr->vsub ;
-        // cr->in_off_right[i]  = (FF_CEIL_RSHIFT(offset,  vsub) + 0)
-        //     * in->linesize[i] + FF_CEIL_RSHIFT(0  * cr->pixstep[i], hsub);
-        // out_off_right[i] = (FF_CEIL_RSHIFT(offset, vsub) + 0)
-        //     * out->linesize[i] + FF_CEIL_RSHIFT(0 * cr->pixstep[i], hsub);
-        // av_image_copy_plane(out->data[i] + out_off_right[i],
-        //                     out->linesize[i],
-        //                     in->data[i] + cr->in_off_right[i],
-        //                     in->linesize[i],
-        //                     cr->linesize[i], cr->pheight[i] - offset * 2);
-
-        // av_image_copy_plane(out->data[3] + offset * out->linesize[3], out->linesize[3],
-        //                     in->data[3] + offset * in->linesize[3], in->linesize[3],
-        //                     cr->linesize[3], cr->height/2);
-        // i = 1;
-        // hsub = cr->hsub;
-        // vsub = cr->vsub;
-        // cr->in_off_right[i]  = (FF_CEIL_RSHIFT(offset,  vsub) + 0)
-        //     * in->linesize[i] + FF_CEIL_RSHIFT(0  * cr->pixstep[i], hsub);
-        // out_off_right[i] = (FF_CEIL_RSHIFT(offset, vsub) + 0)
-        //     * out->linesize[i] + FF_CEIL_RSHIFT(0 * cr->pixstep[i], hsub);
-        // av_image_copy_plane(out->data[i] + out_off_right[i],
-        //                     out->linesize[i],
-        //                     in->data[i] + cr->in_off_right[i],
-        //                     in->linesize[i],
-        //                     cr->linesize[i], cr->pheight[i] - offset * 2);
-
-
+    for (f = 0; f < cr->nb_faces; f++) {
+        for (p = 0; p < cr->nb_planes; p++) {
+            av_image_copy_plane(out->data[p]
+                    + cr->faces[f].o_y * FF_CEIL_RSHIFT(out->linesize[p], cr->chroma[p].y)
+                    + FF_CEIL_RSHIFT(cr->faces[f].o_x, cr->chroma[p].x), out->linesize[p],
+                in->data[p]
+                    + cr->faces[f].i_y * FF_CEIL_RSHIFT(in->linesize[p], cr->chroma[p].y)
+                    + FF_CEIL_RSHIFT(cr->faces[f].i_x, cr->chroma[p].x), in->linesize[p],
+                FF_CEIL_RSHIFT(cr->faces[f].w, cr->chroma[p].x), FF_CEIL_RSHIFT(cr->faces[f].h, cr->chroma[p].y));
+        }
+    }
 
     if (!direct)
         av_frame_free(&in);
@@ -254,7 +276,6 @@ static const AVFilterPad avfilter_vf_cuberemap_outputs[] = {
     {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
-        .config_props = config_output,
     },
     { NULL }
 };
@@ -262,10 +283,11 @@ static const AVFilterPad avfilter_vf_cuberemap_outputs[] = {
 AVFilter ff_vf_cuberemap = {
     .name        = "cuberemap",
     .description = NULL_IF_CONFIG_SMALL("Remaps a cubemap."),
-    .init        = init,
-    .uninit      = uninit,
+    // .init        = init,
+    // .uninit      = uninit,
     .priv_size   = sizeof(CuberemapContext),
     .priv_class  = &cuberemap_class,
+    .query_formats = query_formats,
     .inputs      = avfilter_vf_cuberemap_inputs,
     .outputs     = avfilter_vf_cuberemap_outputs,
 };
