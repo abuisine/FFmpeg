@@ -17,13 +17,13 @@ OBJS = allfilters.o                                                     \
        buffer.o                                                         \
        buffersink.o                                                     \
        buffersrc.o                                                      \
+       cuberemap.o                                                      \
        drawutils.o                                                      \
        fifo.o                                                           \
        formats.o                                                        \
        graphdump.o                                                      \
        graphparser.o                                                    \
        opencl_allkernels.o                                              \
-       transform.o                                                      \
        video.o                                                          \
 
 
@@ -114,6 +114,7 @@ OBJS-$(CONFIG_COPY_FILTER)                   += vf_copy.o
 OBJS-$(CONFIG_COVER_RECT_FILTER)             += vf_cover_rect.o lavfutils.o
 OBJS-$(CONFIG_CROP_FILTER)                   += vf_crop.o
 OBJS-$(CONFIG_CROPDETECT_FILTER)             += vf_cropdetect.o
+OBJS-$(CONFIG_CUBEREMAP_FILTER)              += vf_cuberemap.o
 OBJS-$(CONFIG_CURVES_FILTER)                 += vf_curves.o
 OBJS-$(CONFIG_DCTDNOIZ_FILTER)               += vf_dctdnoiz.o
 OBJS-$(CONFIG_DEBAND_FILTER)                 += vf_deband.o
@@ -224,7 +225,6 @@ OBJS-$(CONFIG_TELECINE_FILTER)               += vf_telecine.o
 OBJS-$(CONFIG_THUMBNAIL_FILTER)              += vf_thumbnail.o
 OBJS-$(CONFIG_TILE_FILTER)                   += vf_tile.o
 OBJS-$(CONFIG_TINTERLACE_FILTER)             += vf_tinterlace.o
-OBJS-$(CONFIG_TRANSFORM_FILTER)              += vf_transform.o
 OBJS-$(CONFIG_TRANSPOSE_FILTER)              += vf_transpose.o
 OBJS-$(CONFIG_TRIM_FILTER)                   += trim.o
 OBJS-$(CONFIG_UNSHARP_FILTER)                += vf_unsharp.o
