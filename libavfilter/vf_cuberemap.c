@@ -231,19 +231,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     CuberemapContext *cr = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out;
-    int f, p, direct = 0;
+    int f, p = 0;
 
-    if (av_frame_is_writable(in)) {
-        direct = 1;
-        out = in;
-    } else {
-        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
-        if (!out) {
-            av_frame_free(&in);
-            return AVERROR(ENOMEM);
-        }
-        av_frame_copy_props(out, in);
+    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    if (!out) {
+        av_frame_free(&in);
+        return AVERROR(ENOMEM);
     }
+    av_frame_copy_props(out, in);
 
     for (f = 0; f < cr->nb_faces; f++) {
         for (p = 0; p < cr->nb_planes; p++) {
@@ -257,8 +252,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
     }
 
-    if (!direct)
-        av_frame_free(&in);
+    av_frame_free(&in);
     return ff_filter_frame(outlink, out);
 }
 
