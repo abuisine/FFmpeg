@@ -17,7 +17,6 @@ OBJS = allfilters.o                                                     \
        buffer.o                                                         \
        buffersink.o                                                     \
        buffersrc.o                                                      \
-       cuberemap.o                                                      \
        drawutils.o                                                      \
        fifo.o                                                           \
        formats.o                                                        \

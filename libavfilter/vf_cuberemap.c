@@ -62,9 +62,11 @@ typedef enum OutputLayout {
     OUTPUT_LAYOUT_N
 } OutputLayour;
 
-typedef struct TransformContext {
+typedef struct CuberemapContext {
     const AVClass *class;
-} TransformContext;
+    int input_layout;
+    int output_layout;
+} CuberemapContext;
 
 #define OFFSET(x) offsetof(CuberemapContext, x)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
@@ -90,7 +92,7 @@ static const AVOption cuberemap_options[] = {
     { NULL }
 };
 
-AVFILTER_DEFINE_CLASS(edgedetect);
+AVFILTER_DEFINE_CLASS(cuberemap);
 
 static av_cold int init(AVFilterContext *ctx)
 {
@@ -138,7 +140,6 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     CuberemapContext *cuberemap = ctx->priv;
 
-    return 0;
 }
 
 static const AVFilterPad avfilter_vf_cuberemap_inputs[] = {
