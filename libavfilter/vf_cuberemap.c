@@ -74,32 +74,13 @@ typedef struct TransformPlaneMap {
 
 typedef struct TransformContext {
     const AVClass *class;
-    int w, h;
     TransformPlaneMap *out_map;
-    int out_map_planes;
 
     AVDictionary *opts;
-    char *w_expr;               ///< width  expression string
-    char *h_expr;               ///< height expression string
-    char *size_str;
-    int cube_edge_length;
-    int max_cube_edge_length;
-    int output_layout;
-    int input_stereo_format;
-    int vflip;
-    int planes;
-    int w_subdivisons, h_subdivisons;
-    float main_plane_ratio;
-    float expand_coef;
-    float fixed_yaw;    ///< Yaw (asimuth) angle, degrees
-    float fixed_pitch;  ///< Pitch (elevation) angle, degrees
-    float fixed_hfov;   ///< Horizontal field of view, degrees
-    float fixed_vfov;   ///< Vertical field of view, degrees
 } TransformContext;
 
 #define OFFSET(x) offsetof(CuberemapContext, x)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
-
 static const AVOption cuberemap_options[] = {
     { "input_layout", "Input video layout format",         OFFSET(input_layout),    AV_OPT_TYPE_INT,  {.i64 = INPUT_LAYOUT_CUBEMAP }, 0, INPUT_LAYOUT_N - 1,  .flags = FLAGS, "input_format" },
     { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_CUBEMAP },             0, 0, FLAGS, "input_layout" },
@@ -123,6 +104,13 @@ static const AVOption cuberemap_options[] = {
 };
 
 AVFILTER_DEFINE_CLASS(edgedetect);
+
+static av_cold int init(AVFilterContext *ctx)
+{
+    CuberemapContext *cuberemap = ctx->priv;
+
+    return 0;
+}
 
 static int config_props(AVFilterLink *inlink)
 {
@@ -148,28 +136,6 @@ static int config_props(AVFilterLink *inlink)
 // Vertically, if we pass through the north pole, we start coming back 'down'
 // in the Y direction (ie, a reflection from the boundary) but we also are
 // on the opposite side of the sphere so the X value changes by 0.5.
-static inline void normalize_equirectangular(float x, float y, float *xout, float *yout) {
-    if (y >= 1.0f) {
-        // Example: y = 1.25 ; 2.0 - 1.25 = 0.75.
-        y = 2.0f - y;
-        x += 0.5f;
-    } else if (y < 0.0f) {
-        y = -y;
-        x += 0.5f;
-    }
-
-    if (x >= 1.0f) {
-        int ipart = (int) x;
-        x -= ipart;
-    } else if (x < 0.0f) {
-        // Example: x = -1.25.  ipart = 1. x += 2 so x = 0.25.
-        int ipart = (int) (-x);
-        x += (ipart + 1);
-    }
-
-    *xout = x;
-    *yout = y;
-}
 
 static inline void transform_pos(TransformContext *ctx, float x, float y, float *outX, float *outY) {
     int is_right = 0;
@@ -444,42 +410,6 @@ static inline void transform_pos(TransformContext *ctx, float x, float y, float 
     av_assert1(*outY >= 0 && *outY <= 1);
 }
 
-static inline int increase_pixel_weight(TransformPixelWeights *ws, uint32_t id) {
-    if (ws->n == 0) {
-        ws->pairs = av_malloc_array(INITIAL_PAIR_SIZE, sizeof(*ws->pairs));
-        if (!ws->pairs) {
-            return AVERROR(ENOMEM);
-        }
-        *ws->pairs = PACK_PAIR(id, 1);
-        ++ws->n;
-        return 0;
-    }
-
-    // Looking for existing id
-    for (int i = 0; i < ws->n; ++i) {
-        if (UNPACK_ID(ws->pairs[i]) == id) {
-            ++ws->pairs[i]; // since weight is packed in the lower bits, it works
-            return 0;
-        }
-    }
-
-    // if n is a power of 2, then we need to grow the array
-    // grow array by power of 2, copy elements over
-    if ((ws->n >= INITIAL_PAIR_SIZE) && !(ws->n & (ws->n - 1))) {
-        uint32_t *new_pairs = av_malloc_array(ws->n * 2, sizeof(*ws->pairs));
-        if (!new_pairs) {
-            return AVERROR(ENOMEM);
-        }
-        memcpy(new_pairs, ws->pairs, sizeof(*ws->pairs) * ws->n);
-        av_freep(&ws->pairs);
-        ws->pairs = new_pairs;
-    }
-
-    ws->pairs[ws->n] = PACK_PAIR(id, 1);
-    ++ws->n;
-
-    return 0;
-}
 
 static inline int generate_map(TransformContext *s,
         AVFilterLink *inlink, AVFilterLink *outlink, AVFrame *in) {
@@ -545,89 +475,6 @@ static inline int generate_map(TransformContext *s,
         }
     }
     return 0;
-}
-
-
-
-static av_cold int init_dict(AVFilterContext *ctx, AVDictionary **opts)
-{
-    TransformContext *s = ctx->priv;
-
-    if (s->size_str && (s->w_expr || s->h_expr)) {
-        av_log(ctx, AV_LOG_ERROR,
-                "Size and width/height expressions cannot be set at the same time.\n");
-        return AVERROR(EINVAL);
-    }
-
-    if (s->w_expr && !s->h_expr)
-        FFSWAP(char *, s->w_expr, s->size_str);
-
-    av_log(ctx, AV_LOG_VERBOSE, "w:%s h:%s\n",
-            s->w_expr, s->h_expr);
-
-    s->opts = *opts;
-    *opts = NULL;
-
-    return 0;
-}
-
-static av_cold void uninit(AVFilterContext *ctx)
-{
-    TransformContext *s = ctx->priv;
-
-    for (int plane = 0; plane < s->out_map_planes; ++plane) {
-        TransformPlaneMap *p = &s->out_map[plane];
-        for (int i = 0; i < p->h * p->w; ++i) {
-            av_freep(&p->weights[i].pairs);
-            p->weights[i].pairs = NULL;
-        }
-        av_freep(&p->weights);
-        p->weights = NULL;
-    }
-    av_freep(&s->out_map);
-    s->out_map = NULL;
-
-    av_dict_free(&s->opts);
-    s->opts = NULL;
-}
-
-static void filter_slice_boundcheck(
-        const int tile_i,
-        const int tile_j,
-        const int linesize,
-        const int subs,
-        const TransformPlaneMap *p,
-        const uint8_t* in_data, uint8_t* out_data
-        )
-{
-    for (int i = 0; i < 16; ++i) {
-        if (tile_i + i >= p->h) {
-            break;
-        }
-
-        int out_line = linesize * (tile_i + i);
-        int map_line = p->w * (tile_i + i);
-        for (int j = 0; j < 16; ++j) {
-            if (tile_j + j >= p->w) {
-                break;
-            }
-
-            int out_sample = out_line + tile_j + j;
-            int id = map_line + tile_j + j;
-            TransformPixelWeights *ws = &p->weights[id];
-            if (ws->n == 1) {
-                out_data[out_sample] = in_data[UNPACK_ID(ws->pairs[0])];
-            } else {
-                int color_sum = 0;
-                for (int k = 0; k < ws->n; ++k) {
-                    color_sum += ((int) in_data[UNPACK_ID(ws->pairs[k])]) *
-                        UNPACK_COUNT(ws->pairs[k]);
-                }
-                // Round to nearest
-                out_data[out_sample] = (uint8_t) ((color_sum + (subs >> 1)) / subs);
-            }
-        }
-    }
 }
 
 static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
@@ -792,15 +639,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     return ff_filter_frame(outlink, out);
 }
 
-static const AVClass transform_class = {
-    .class_name       = "transform",
-    .item_name        = av_default_item_name,
-    .option           = transform_options,
-    .version          = LIBAVUTIL_VERSION_INT,
-    .category         = AV_CLASS_CATEGORY_FILTER,
-};
+static av_cold void uninit(AVFilterContext *ctx)
+{
+    CuberemapContext *cuberemap = ctx->priv;
+    
+    return 0;
+}
 
-static const AVFilterPad avfilter_vf_transform_inputs[] = {
+static const AVFilterPad avfilter_vf_cuberemap_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -810,7 +656,7 @@ static const AVFilterPad avfilter_vf_transform_inputs[] = {
     { NULL }
 };
 
-static const AVFilterPad avfilter_vf_transform_outputs[] = {
+static const AVFilterPad avfilter_vf_cuberemap_outputs[] = {
     {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
@@ -821,10 +667,10 @@ static const AVFilterPad avfilter_vf_transform_outputs[] = {
 AVFilter ff_vf_cuberemap = {
     .name        = "cuberemap",
     .description = NULL_IF_CONFIG_SMALL("Remaps a cubemap."),
-    .init_dict   = init_dict,
+    .init        = init,
     .uninit      = uninit,
-    .priv_size   = sizeof(TransformContext),
-    .priv_class  = &transform_class,
-    .inputs      = avfilter_vf_transform_inputs,
-    .outputs     = avfilter_vf_transform_outputs,
+    .priv_size   = sizeof(CuberemapContext),
+    .priv_class  = &cuberemap_class,
+    .inputs      = avfilter_vf_cuberemap_inputs,
+    .outputs     = avfilter_vf_cuberemap_outputs,
 };
