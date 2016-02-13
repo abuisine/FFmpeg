@@ -39,31 +39,18 @@
 #define FRONT   4
 #define BACK    5
 
-typedef enum InputLayout {
-    INPUT_LAYOUT_CUBEMAP,
-    INPUT_LAYOUT_CUBEMAP_32,
-    INPUT_LAYOUT_CUBEMAP_180,
-    INPUT_LAYOUT_PLANE_POLES,
-    INPUT_LAYOUT_PLANE_POLES_6,
-    INPUT_LAYOUT_PLANE_POLES_CUBEMAP,
-    INPUT_LAYOUT_PLANE_CUBEMAP,
-    INPUT_LAYOUT_PLANE_CUBEMAP_32,
+typedef enum Layout {
+    LAYOUT_CUBEMAP,
+    LAYOUT_CUBEMAP_32,
+    LAYOUT_CUBEMAP_180,
+    LAYOUT_PLANE_POLES,
+    LAYOUT_PLANE_POLES_6,
+    LAYOUT_PLANE_POLES_CUBEMAP,
+    LAYOUT_PLANE_CUBEMAP,
+    LAYOUT_PLANE_CUBEMAP_32,
 
-    INPUT_LAYOUT_N
-} InputLayout;
-
-typedef enum OutputLayout {
-    OUTPUT_LAYOUT_CUBEMAP,
-    OUTPUT_LAYOUT_CUBEMAP_32,
-    OUTPUT_LAYOUT_CUBEMAP_180,
-    OUTPUT_LAYOUT_PLANE_POLES,
-    OUTPUT_LAYOUT_PLANE_POLES_6,
-    OUTPUT_LAYOUT_PLANE_POLES_CUBEMAP,
-    OUTPUT_LAYOUT_PLANE_CUBEMAP,
-    OUTPUT_LAYOUT_PLANE_CUBEMAP_32,
-
-    OUTPUT_LAYOUT_N
-} OutputLayout;
+    LAYOUT_N
+} Layout;
 
 typedef struct CubeFace {
     int i_x;
@@ -84,11 +71,9 @@ typedef struct CuberemapContext {
     CubeFace faces[42]; //FIXME
     int nb_faces;
     int nb_planes;
-    int linesize[4];
-    int pixstep[4];
-    int pheight[4];
-    int sampling[4];
     ChromaDisplacement chroma[4];
+    int pixstep[4];
+    int linesize[4];
     int input_layout;
     int output_layout;
 } CuberemapContext;
@@ -96,24 +81,24 @@ typedef struct CuberemapContext {
 #define OFFSET(x) offsetof(CuberemapContext, x)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption cuberemap_options[] = {
-    { "input_layout", "Input video layout format",         OFFSET(input_layout),    AV_OPT_TYPE_INT,  {.i64 = INPUT_LAYOUT_CUBEMAP }, 0, INPUT_LAYOUT_N - 1,  .flags = FLAGS, "input_format" },
-    { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_CUBEMAP },             0, 0, FLAGS, "input_layout" },
-    { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "input_layout" },
-    { "cubemap_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "input_layout" },
-    { "plane_poles",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_POLES },         0, 0, FLAGS, "input_layout" },
-    { "plane_poles_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "input_layout" },
-    { "plane_poles_cubemap", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "input_layout" },
-    { "plane_cubemap",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "input_layout" },
-    { "plane_cubemap_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = INPUT_LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "input_layout" },
-    { "output_layout", "Output video layout format",         OFFSET(output_layout),    AV_OPT_TYPE_INT,  {.i64 = OUTPUT_LAYOUT_CUBEMAP_32 }, 0, OUTPUT_LAYOUT_N - 1,  .flags = FLAGS, "output_layout" },
-    { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_CUBEMAP },             0, 0, FLAGS, "output_layout" },
-    { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "output_layout" },
-    { "cubemap_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "output_layout" },
-    { "plane_poles",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_POLES },         0, 0, FLAGS, "output_layout" },
-    { "plane_poles_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "output_layout" },
-    { "plane_poles_cubemap", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "output_layout" },
-    { "plane_cubemap",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "output_layout" },
-    { "plane_cubemap_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = OUTPUT_LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "output_layout" },
+    { "input_layout", "Input video layout format",         OFFSET(input_layout),    AV_OPT_TYPE_INT,  {.i64 = LAYOUT_CUBEMAP }, 0, LAYOUT_N - 1,  .flags = FLAGS, "input_format" },
+    { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP },             0, 0, FLAGS, "input_layout" },
+    { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "input_layout" },
+    { "cubemap_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "input_layout" },
+    { "plane_poles",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES },         0, 0, FLAGS, "input_layout" },
+    { "plane_poles_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "input_layout" },
+    { "plane_poles_cubemap", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "input_layout" },
+    { "plane_cubemap",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "input_layout" },
+    { "plane_cubemap_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "input_layout" },
+    { "output_layout", "Output video layout format",         OFFSET(output_layout),    AV_OPT_TYPE_INT,  {.i64 = LAYOUT_CUBEMAP_32 }, 0, LAYOUT_N - 1,  .flags = FLAGS, "output_layout" },
+    { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP },             0, 0, FLAGS, "output_layout" },
+    { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "output_layout" },
+    { "cubemap_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "output_layout" },
+    { "plane_poles",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES },         0, 0, FLAGS, "output_layout" },
+    { "plane_poles_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "output_layout" },
+    { "plane_poles_cubemap", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "output_layout" },
+    { "plane_cubemap",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "output_layout" },
+    { "plane_cubemap_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "output_layout" },
     { NULL }
 };
 
@@ -122,12 +107,57 @@ AVFILTER_DEFINE_CLASS(cuberemap);
 static int query_formats(AVFilterContext *ctx)
 {
     static const enum AVPixelFormat pix_fmts[] = {
-        AV_PIX_FMT_YUV420P,
-        AV_PIX_FMT_YUV410P,
-        AV_PIX_FMT_YUV444P,
-        AV_PIX_FMT_YUV422P,
-        AV_PIX_FMT_YUV411P,
-        AV_PIX_FMT_NONE
+    AV_PIX_FMT_RGB24, AV_PIX_FMT_BGR24,
+    AV_PIX_FMT_RGB48BE, AV_PIX_FMT_BGR48BE,
+    AV_PIX_FMT_RGB48LE, AV_PIX_FMT_BGR48LE,
+    AV_PIX_FMT_RGBA64BE, AV_PIX_FMT_BGRA64BE,
+    AV_PIX_FMT_RGBA64LE, AV_PIX_FMT_BGRA64LE,
+    AV_PIX_FMT_RGBA,  AV_PIX_FMT_BGRA,
+    AV_PIX_FMT_ARGB,  AV_PIX_FMT_ABGR,
+    AV_PIX_FMT_RGB0,  AV_PIX_FMT_BGR0,
+    AV_PIX_FMT_0RGB,  AV_PIX_FMT_0BGR,
+    AV_PIX_FMT_GBRP,
+    AV_PIX_FMT_GBRP9BE,  AV_PIX_FMT_GBRP9LE,
+    AV_PIX_FMT_GBRP10BE, AV_PIX_FMT_GBRP10LE,
+    AV_PIX_FMT_GBRP12BE, AV_PIX_FMT_GBRP12LE,
+    AV_PIX_FMT_GBRP14BE, AV_PIX_FMT_GBRP14LE,
+    AV_PIX_FMT_GBRP16BE, AV_PIX_FMT_GBRP16LE,
+    AV_PIX_FMT_YUV410P,
+    AV_PIX_FMT_YUV411P,
+    AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUVA420P,
+    AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUVA422P,
+    AV_PIX_FMT_YUV440P,
+    AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUVA444P,
+    AV_PIX_FMT_YUVJ411P,
+    AV_PIX_FMT_YUVJ420P,
+    AV_PIX_FMT_YUVJ422P,
+    AV_PIX_FMT_YUVJ440P,
+    AV_PIX_FMT_YUVJ444P,
+    AV_PIX_FMT_YUV420P9LE,  AV_PIX_FMT_YUVA420P9LE,
+    AV_PIX_FMT_YUV420P9BE,  AV_PIX_FMT_YUVA420P9BE,
+    AV_PIX_FMT_YUV422P9LE,  AV_PIX_FMT_YUVA422P9LE,
+    AV_PIX_FMT_YUV422P9BE,  AV_PIX_FMT_YUVA422P9BE,
+    AV_PIX_FMT_YUV444P9LE,  AV_PIX_FMT_YUVA444P9LE,
+    AV_PIX_FMT_YUV444P9BE,  AV_PIX_FMT_YUVA444P9BE,
+    AV_PIX_FMT_YUV420P10LE, AV_PIX_FMT_YUVA420P10LE,
+    AV_PIX_FMT_YUV420P10BE, AV_PIX_FMT_YUVA420P10BE,
+    AV_PIX_FMT_YUV422P10LE, AV_PIX_FMT_YUVA422P10LE,
+    AV_PIX_FMT_YUV422P10BE, AV_PIX_FMT_YUVA422P10BE,
+    AV_PIX_FMT_YUV444P10LE, AV_PIX_FMT_YUVA444P10LE,
+    AV_PIX_FMT_YUV444P10BE, AV_PIX_FMT_YUVA444P10BE,
+    AV_PIX_FMT_YUV420P12BE,  AV_PIX_FMT_YUV420P12LE,
+    AV_PIX_FMT_YUV422P12BE,  AV_PIX_FMT_YUV422P12LE,
+    AV_PIX_FMT_YUV444P12BE,  AV_PIX_FMT_YUV444P12LE,
+    AV_PIX_FMT_YUV420P14BE,  AV_PIX_FMT_YUV420P14LE,
+    AV_PIX_FMT_YUV422P14BE,  AV_PIX_FMT_YUV422P14LE,
+    AV_PIX_FMT_YUV444P14BE,  AV_PIX_FMT_YUV444P14LE,
+    AV_PIX_FMT_YUV420P16LE, AV_PIX_FMT_YUVA420P16LE,
+    AV_PIX_FMT_YUV420P16BE, AV_PIX_FMT_YUVA420P16BE,
+    AV_PIX_FMT_YUV422P16LE, AV_PIX_FMT_YUVA422P16LE,
+    AV_PIX_FMT_YUV422P16BE, AV_PIX_FMT_YUVA422P16BE,
+    AV_PIX_FMT_YUV444P16LE, AV_PIX_FMT_YUVA444P16LE,
+    AV_PIX_FMT_YUV444P16BE, AV_PIX_FMT_YUVA444P16BE,
+    AV_PIX_FMT_NONE
     };
     AVFilterFormats *fmts_list = ff_make_format_list(pix_fmts);
     if (!fmts_list)
@@ -157,12 +187,22 @@ static int config_input(AVFilterLink *inlink)
     outlink->w = inlink->w;
     outlink->h = inlink->h / 2;
 
-    int ret;
-    if ((ret = av_image_fill_linesizes(cr->linesize, inlink->format, inlink->w)) < 0)
-        return ret;
 
     cr->nb_planes = av_pix_fmt_count_planes(inlink->format);
+    av_log(ctx, AV_LOG_VERBOSE, "planes count: %d.\n", cr->nb_planes);
+
     av_image_fill_max_pixsteps(cr->pixstep, NULL, desc);
+
+    int ret;
+    if ((ret = av_image_fill_linesizes(cr->linesize, outlink->format, outlink->w)) < 0)
+        return ret;
+
+    int p;
+    for(p = 0; p < cr->nb_planes; p++) {
+        av_log(ctx, AV_LOG_VERBOSE, "plane %d pixel step: %d.\n", p, cr->pixstep[p]);
+        av_log(ctx, AV_LOG_VERBOSE, "plane %d linesize: %d.\n", p, cr->linesize[p]);
+    }
+
     cr->chroma[0].x = 0;
     cr->chroma[0].y = 0;
     cr->chroma[1].x = desc->log2_chroma_w;
@@ -173,6 +213,7 @@ static int config_input(AVFilterLink *inlink)
     cr->chroma[2].y = desc->log2_chroma_h;
 
     cr->nb_faces = 6;
+    av_log(ctx, AV_LOG_VERBOSE, "faces count: %d.\n", cr->nb_faces);
 
     // left eye = right left top
     cr->faces[0].i_x = 0;
@@ -241,14 +282,17 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     av_frame_copy_props(out, in);
 
     for (f = 0; f < cr->nb_faces; f++) {
+        av_log(ctx, AV_LOG_VERBOSE, "processing face %d.\n", f);
         for (p = 0; p < cr->nb_planes; p++) {
+            av_log(ctx, AV_LOG_VERBOSE, "processing plane %d.\n", p);
             av_image_copy_plane(out->data[p]
                     + cr->faces[f].o_y * FF_CEIL_RSHIFT(out->linesize[p], cr->chroma[p].y)
-                    + FF_CEIL_RSHIFT(cr->faces[f].o_x, cr->chroma[p].x), out->linesize[p],
+                    + FF_CEIL_RSHIFT(cr->faces[f].o_x * cr->pixstep[p], cr->chroma[p].x), out->linesize[p],
                 in->data[p]
                     + cr->faces[f].i_y * FF_CEIL_RSHIFT(in->linesize[p], cr->chroma[p].y)
-                    + FF_CEIL_RSHIFT(cr->faces[f].i_x, cr->chroma[p].x), in->linesize[p],
-                FF_CEIL_RSHIFT(cr->faces[f].w, cr->chroma[p].x), FF_CEIL_RSHIFT(cr->faces[f].h, cr->chroma[p].y));
+                    + FF_CEIL_RSHIFT(cr->faces[f].i_x * cr->pixstep[p], cr->chroma[p].x), in->linesize[p],
+
+                FF_CEIL_RSHIFT(cr->faces[f].w * cr->pixstep[p], cr->chroma[p].y), FF_CEIL_RSHIFT(cr->faces[f].h, cr->chroma[p].y));
         }
     }
 
