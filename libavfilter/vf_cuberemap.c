@@ -225,7 +225,7 @@ static int config_input(AVFilterLink *inlink)
     i = 0;
     cr->sprites[i].i_x = 0;
     cr->sprites[i].i_y = 0;
-    cr->sprites[i].o_x = 0;
+    cr->sprites[i].o_x = outlink->w / 6 * 4;
     cr->sprites[i].o_y = 0;
     cr->sprites[i].w = inlink->w / 6;
     cr->sprites[i].h = inlink->h / 4;
@@ -234,7 +234,7 @@ static int config_input(AVFilterLink *inlink)
     i++;
     cr->sprites[i].i_x = inlink->w / 2;
     cr->sprites[i].i_y = 0;
-    cr->sprites[i].o_x = outlink-> w / 6;
+    cr->sprites[i].o_x = outlink->w / 6 * 5;
     cr->sprites[i].o_y = 0;
     cr->sprites[i].w = inlink->w / 6;
     cr->sprites[i].h = inlink->h / 4;
@@ -243,7 +243,7 @@ static int config_input(AVFilterLink *inlink)
     i++;
     cr->sprites[i].i_x = 0;
     cr->sprites[i].i_y = inlink->h / 2;
-    cr->sprites[i].o_x = 0;
+    cr->sprites[i].o_x = outlink->w / 6 * 4;
     cr->sprites[i].o_y = outlink->h / 2;
     cr->sprites[i].w = inlink->w / 6;
     cr->sprites[i].h = inlink->h / 4;
@@ -252,7 +252,7 @@ static int config_input(AVFilterLink *inlink)
     i++;
     cr->sprites[i].i_x = inlink->w / 2;
     cr->sprites[i].i_y = inlink->h / 2;
-    cr->sprites[i].o_x = outlink-> w / 6;
+    cr->sprites[i].o_x = outlink->w / 6 * 5;
     cr->sprites[i].o_y = outlink->h / 2;
     cr->sprites[i].w = inlink->w / 6;
     cr->sprites[i].h = inlink->h / 4;
@@ -262,7 +262,7 @@ static int config_input(AVFilterLink *inlink)
     i++;
     cr->sprites[i].i_x = 0;
     cr->sprites[i].i_y = inlink->h / 4;
-    cr->sprites[i].o_x = outlink->w / 3 * 2;
+    cr->sprites[i].o_x = outlink->w / 3;
     cr->sprites[i].o_y = 0;
     cr->sprites[i].w = inlink->w / 3;
     cr->sprites[i].h = inlink->h / 8;
@@ -271,7 +271,7 @@ static int config_input(AVFilterLink *inlink)
     i++;
     cr->sprites[i].i_x = inlink->w / 3 * 2;
     cr->sprites[i].i_y = inlink->h / 8;
-    cr->sprites[i].o_x = outlink->w / 3 * 2;
+    cr->sprites[i].o_x = outlink->w / 3;
     cr->sprites[i].o_y = outlink->h / 4;
     cr->sprites[i].w = inlink->w / 3;
     cr->sprites[i].h = inlink->h / 8;
@@ -280,7 +280,7 @@ static int config_input(AVFilterLink *inlink)
     i++;
     cr->sprites[i].i_x = 0;
     cr->sprites[i].i_y = inlink->h / 4 * 3;
-    cr->sprites[i].o_x = outlink->w / 3 * 2;
+    cr->sprites[i].o_x = outlink->w / 3;
     cr->sprites[i].o_y = outlink->h / 2;
     cr->sprites[i].w = inlink->w / 3;
     cr->sprites[i].h = inlink->h / 8;
@@ -289,7 +289,7 @@ static int config_input(AVFilterLink *inlink)
     i++;
     cr->sprites[i].i_x = inlink->w / 3 * 2;
     cr->sprites[i].i_y = inlink->h / 8 * 5;
-    cr->sprites[i].o_x = outlink->w / 3 * 2;
+    cr->sprites[i].o_x = outlink->w / 3;
     cr->sprites[i].o_y = outlink->h / 4 * 3;
     cr->sprites[i].w = inlink->w / 3;
     cr->sprites[i].h = inlink->h / 8;
@@ -299,7 +299,7 @@ static int config_input(AVFilterLink *inlink)
     i++;
     cr->sprites[i].i_x = inlink->w / 3;
     cr->sprites[i].i_y = inlink->h / 4;
-    cr->sprites[i].o_x = outlink->w / 3;
+    cr->sprites[i].o_x = 0;
     cr->sprites[i].o_y = 0;
     cr->sprites[i].w = inlink->w / 3;
     cr->sprites[i].h = inlink->h / 4;
@@ -308,7 +308,7 @@ static int config_input(AVFilterLink *inlink)
     i++;
     cr->sprites[i].i_x = inlink->w / 3;
     cr->sprites[i].i_y = inlink->h / 4 * 3;
-    cr->sprites[i].o_x = outlink->w / 3;
+    cr->sprites[i].o_x = 0;
     cr->sprites[i].o_y = outlink->h / 2;
     cr->sprites[i].w = inlink->w / 3;
     cr->sprites[i].h = inlink->h / 4;
