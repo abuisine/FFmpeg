@@ -183,9 +183,17 @@ static int config_input(AVFilterLink *inlink)
     AVFilterLink *outlink = ctx->outputs[0];
     CuberemapContext *cr = ctx->priv;;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
+    int i;
 
     outlink->w = inlink->w;
     outlink->h = inlink->h / 2;
+
+    av_log(ctx, AV_LOG_VERBOSE, "resize: %dx%d -> %dx%d.\n",
+        inlink->w,
+        inlink->h,
+        outlink->w,
+        outlink->h
+       );
 
 
     cr->nb_planes = av_pix_fmt_count_planes(inlink->format);
@@ -212,56 +220,101 @@ static int config_input(AVFilterLink *inlink)
     cr->chroma[2].x = desc->log2_chroma_w;
     cr->chroma[2].y = desc->log2_chroma_h;
 
-    cr->nb_sprites = 6;
-    av_log(ctx, AV_LOG_VERBOSE, "sprites count: %d.\n", cr->nb_sprites);
+    // LEFT RIGHT
+    // left eye = right
+    i = 0;
+    cr->sprites[i].i_x = 0;
+    cr->sprites[i].i_y = 0;
+    cr->sprites[i].o_x = 0;
+    cr->sprites[i].o_y = 0;
+    cr->sprites[i].w = inlink->w / 6;
+    cr->sprites[i].h = inlink->h / 4;
 
-    // left eye = right left top
-    cr->sprites[0].i_x = 0;
-    cr->sprites[0].i_y = 0;
-    cr->sprites[0].o_x = 0;
-    cr->sprites[0].o_y = 0;
-    cr->sprites[0].w = inlink->w;
-    cr->sprites[0].h = inlink->h / 4;
+    // left eye = left
+    i++;
+    cr->sprites[i].i_x = inlink->w / 2;
+    cr->sprites[i].i_y = 0;
+    cr->sprites[i].o_x = outlink-> w / 6;
+    cr->sprites[i].o_y = 0;
+    cr->sprites[i].w = inlink->w / 6;
+    cr->sprites[i].h = inlink->h / 4;
 
-    // right eye = right left top
-    cr->sprites[1].i_x = 0;
-    cr->sprites[1].i_y = inlink->h / 4 * 2;
-    cr->sprites[1].o_x = 0;
-    cr->sprites[1].o_y = outlink->h / 2;
-    cr->sprites[1].w = inlink->w;
-    cr->sprites[1].h = inlink->h / 4;
+    // right eye = right
+    i++;
+    cr->sprites[i].i_x = 0;
+    cr->sprites[i].i_y = inlink->h / 2;
+    cr->sprites[i].o_x = 0;
+    cr->sprites[i].o_y = outlink->h / 2;
+    cr->sprites[i].w = inlink->w / 6;
+    cr->sprites[i].h = inlink->h / 4;
 
+    // right eye = left
+    i++;
+    cr->sprites[i].i_x = inlink->w / 2;
+    cr->sprites[i].i_y = inlink->h / 2;
+    cr->sprites[i].o_x = outlink-> w / 6;
+    cr->sprites[i].o_y = outlink->h / 2;
+    cr->sprites[i].w = inlink->w / 6;
+    cr->sprites[i].h = inlink->h / 4;
+
+    // TOP BOTTOM
     // left eye = bottom
-    cr->sprites[2].i_x = 0;
-    cr->sprites[2].i_y = inlink->h / 4;
-    cr->sprites[2].o_x = outlink->w / 3 * 2;
-    cr->sprites[2].o_y = 0;
-    cr->sprites[2].w = inlink->w / 3;
-    cr->sprites[2].h = inlink->h / 8;
+    i++;
+    cr->sprites[i].i_x = 0;
+    cr->sprites[i].i_y = inlink->h / 4;
+    cr->sprites[i].o_x = outlink->w / 3 * 2;
+    cr->sprites[i].o_y = 0;
+    cr->sprites[i].w = inlink->w / 3;
+    cr->sprites[i].h = inlink->h / 8;
+
+    // left eye = top
+    i++;
+    cr->sprites[i].i_x = inlink->w / 3 * 2;
+    cr->sprites[i].i_y = inlink->h / 8;
+    cr->sprites[i].o_x = outlink->w / 3 * 2;
+    cr->sprites[i].o_y = outlink->h / 4;
+    cr->sprites[i].w = inlink->w / 3;
+    cr->sprites[i].h = inlink->h / 8;
 
     // right eye = bottom
-    cr->sprites[3].i_x = 0;
-    cr->sprites[3].i_y = inlink->h / 4 * 3;
-    cr->sprites[3].o_x = outlink->w / 3 * 2;
-    cr->sprites[3].o_y = outlink->h / 2;
-    cr->sprites[3].w = inlink->w / 3;
-    cr->sprites[3].h = inlink->h / 8;
+    i++;
+    cr->sprites[i].i_x = 0;
+    cr->sprites[i].i_y = inlink->h / 4 * 3;
+    cr->sprites[i].o_x = outlink->w / 3 * 2;
+    cr->sprites[i].o_y = outlink->h / 2;
+    cr->sprites[i].w = inlink->w / 3;
+    cr->sprites[i].h = inlink->h / 8;
 
-    // left eye = front
-    cr->sprites[4].i_x = inlink->w / 3;
-    cr->sprites[4].i_y = inlink->h / 4;
-    cr->sprites[4].o_x = outlink->w / 6;
-    cr->sprites[4].o_y = 0;
-    cr->sprites[4].w = inlink->w / 3;
-    cr->sprites[4].h = inlink->h / 4;
+    // right eye = top
+    i++;
+    cr->sprites[i].i_x = inlink->w / 3 * 2;
+    cr->sprites[i].i_y = inlink->h / 8 * 5;
+    cr->sprites[i].o_x = outlink->w / 3 * 2;
+    cr->sprites[i].o_y = outlink->h / 4 * 3;
+    cr->sprites[i].w = inlink->w / 3;
+    cr->sprites[i].h = inlink->h / 8;
 
-    // right eye = front
-    cr->sprites[5].i_x = inlink->w / 3;
-    cr->sprites[5].i_y = inlink->h / 4 * 3;
-    cr->sprites[5].o_x = outlink->w / 6;
-    cr->sprites[5].o_y = outlink->h / 2;
-    cr->sprites[5].w = inlink->w / 3;
-    cr->sprites[5].h = inlink->h / 4;
+    // FACE
+    // right eye = face
+    i++;
+    cr->sprites[i].i_x = inlink->w / 3;
+    cr->sprites[i].i_y = inlink->h / 4;
+    cr->sprites[i].o_x = outlink->w / 3;
+    cr->sprites[i].o_y = 0;
+    cr->sprites[i].w = inlink->w / 3;
+    cr->sprites[i].h = inlink->h / 4;
+
+    // right eye = face
+    i++;
+    cr->sprites[i].i_x = inlink->w / 3;
+    cr->sprites[i].i_y = inlink->h / 4 * 3;
+    cr->sprites[i].o_x = outlink->w / 3;
+    cr->sprites[i].o_y = outlink->h / 2;
+    cr->sprites[i].w = inlink->w / 3;
+    cr->sprites[i].h = inlink->h / 4;
+
+    cr->nb_sprites = i + 1;
+    av_log(ctx, AV_LOG_VERBOSE, "sprites count: %d.\n", cr->nb_sprites);
 
     return 0;
 }
@@ -282,9 +335,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     av_frame_copy_props(out, in);
 
     for (f = 0; f < cr->nb_sprites; f++) {
-        av_log(ctx, AV_LOG_VERBOSE, "processing face %d.\n", f);
+        av_log(ctx, AV_LOG_DEBUG, "processing sprite %d.\n", f);
         for (p = 0; p < cr->nb_planes; p++) {
-            av_log(ctx, AV_LOG_VERBOSE, "processing plane %d.\n", p);
+            av_log(ctx, AV_LOG_DEBUG, "processing plane %d.\n", p);
             av_image_copy_plane(out->data[p]
                     + cr->sprites[f].o_y * FF_CEIL_RSHIFT(out->linesize[p], cr->chroma[p].y)
                     + FF_CEIL_RSHIFT(cr->sprites[f].o_x * cr->pixstep[p], cr->chroma[p].x), out->linesize[p],
