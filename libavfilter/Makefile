@@ -130,6 +130,7 @@ OBJS-$(CONFIG_COPY_FILTER)                   += vf_copy.o
 OBJS-$(CONFIG_COVER_RECT_FILTER)             += vf_cover_rect.o lavfutils.o
 OBJS-$(CONFIG_CROP_FILTER)                   += vf_crop.o
 OBJS-$(CONFIG_CROPDETECT_FILTER)             += vf_cropdetect.o
+OBJS-$(CONFIG_CUBEREMAP_FILTER)              += vf_cuberemap.o
 OBJS-$(CONFIG_CURVES_FILTER)                 += vf_curves.o
 OBJS-$(CONFIG_DCTDNOIZ_FILTER)               += vf_dctdnoiz.o
 OBJS-$(CONFIG_DEBAND_FILTER)                 += vf_deband.o
