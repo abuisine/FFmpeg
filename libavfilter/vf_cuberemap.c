@@ -324,28 +324,33 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     CuberemapContext *cr = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
-    AVFrame *out;
-    int f, p = 0;
 
-    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    AVFrame *out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!out) {
         av_frame_free(&in);
         return AVERROR(ENOMEM);
     }
     av_frame_copy_props(out, in);
 
-    for (f = 0; f < cr->nb_sprites; f++) {
-        av_log(ctx, AV_LOG_DEBUG, "processing sprite %d.\n", f);
-        for (p = 0; p < cr->nb_planes; p++) {
-            av_log(ctx, AV_LOG_DEBUG, "processing plane %d.\n", p);
+    int f, p, factor_y = 0;
+
+    for (p = 0; p < cr->nb_planes; p++) {
+        av_log(ctx, AV_LOG_DEBUG, "processing plane %d.\n", p);
+        av_log(ctx, AV_LOG_DEBUG, "\tchroma:%dx%d pixstep:%d.\n", cr->chroma[p].x, cr->chroma[p].y, cr->pixstep[p]);
+
+        factor_y = FF_CEIL_RSHIFT(out->linesize[p], cr->chroma[p].y);
+        av_log(ctx, AV_LOG_DEBUG, "\tfactor_y:%d.\n", factor_y);
+
+        for (f = 0; f < cr->nb_sprites; f++) {
+            av_log(ctx, AV_LOG_DEBUG, "\tprocessing sprite %d.\n", f);
+
             av_image_copy_plane(out->data[p]
-                    + cr->sprites[f].o_y * FF_CEIL_RSHIFT(out->linesize[p], cr->chroma[p].y)
+                    + cr->sprites[f].o_y * factor_y
                     + FF_CEIL_RSHIFT(cr->sprites[f].o_x * cr->pixstep[p], cr->chroma[p].x), out->linesize[p],
                 in->data[p]
-                    + cr->sprites[f].i_y * FF_CEIL_RSHIFT(in->linesize[p], cr->chroma[p].y)
+                    + cr->sprites[f].i_y * factor_y
                     + FF_CEIL_RSHIFT(cr->sprites[f].i_x * cr->pixstep[p], cr->chroma[p].x), in->linesize[p],
-
-                FF_CEIL_RSHIFT(cr->sprites[f].w * cr->pixstep[p], cr->chroma[p].y), FF_CEIL_RSHIFT(cr->sprites[f].h, cr->chroma[p].y));
+                FF_CEIL_RSHIFT(cr->sprites[f].w * cr->pixstep[p], cr->chroma[p].x), FF_CEIL_RSHIFT(cr->sprites[f].h, cr->chroma[p].y));
         }
     }
 
