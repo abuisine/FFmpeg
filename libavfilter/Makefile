@@ -145,6 +145,7 @@ OBJS-$(CONFIG_COREIMAGE_FILTER)              += vf_coreimage.o
 OBJS-$(CONFIG_COVER_RECT_FILTER)             += vf_cover_rect.o lavfutils.o
 OBJS-$(CONFIG_CROP_FILTER)                   += vf_crop.o
 OBJS-$(CONFIG_CROPDETECT_FILTER)             += vf_cropdetect.o
+OBJS-$(CONFIG_CUBEREMAP_FILTER)              += vf_cuberemap.o
 OBJS-$(CONFIG_CURVES_FILTER)                 += vf_curves.o
 OBJS-$(CONFIG_DATASCOPE_FILTER)              += vf_datascope.o
 OBJS-$(CONFIG_DCTDNOIZ_FILTER)               += vf_dctdnoiz.o
