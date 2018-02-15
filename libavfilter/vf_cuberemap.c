@@ -40,15 +40,10 @@
 #define BACK    5
 
 typedef enum Layout {
-    LAYOUT_CUBEMAP,
-    LAYOUT_CUBEMAP_32,
-    LAYOUT_CUBEMAP_180,
-    LAYOUT_PLANE_POLES,
-    LAYOUT_PLANE_POLES_6,
-    LAYOUT_PLANE_POLES_CUBEMAP,
-    LAYOUT_PLANE_CUBEMAP,
-    LAYOUT_PLANE_CUBEMAP_32,
-
+    LAYOUT_CUBEMAP_180L,            // one single eye
+    LAYOUT_CUBEMAP_360L,            // one single eye
+    LAYOUT_CUBEMAP_180AB,           // above-below (left eye above, right eye below)
+    LAYOUT_CUBEMAP_360AB,           // above-below (left eye above, right eye below)
     LAYOUT_N
 } Layout;
 
@@ -81,24 +76,16 @@ typedef struct CuberemapContext {
 #define OFFSET(x) offsetof(CuberemapContext, x)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption cuberemap_options[] = {
-    { "input_layout", "Input video layout format",         OFFSET(input_layout),    AV_OPT_TYPE_INT,  {.i64 = LAYOUT_CUBEMAP }, 0, LAYOUT_N - 1,  .flags = FLAGS, "input_format" },
-    { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP },             0, 0, FLAGS, "input_layout" },
-    { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "input_layout" },
-    { "cubemap_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "input_layout" },
-    { "plane_poles",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES },         0, 0, FLAGS, "input_layout" },
-    { "plane_poles_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "input_layout" },
-    { "plane_poles_cubemap", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "input_layout" },
-    { "plane_cubemap",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "input_layout" },
-    { "plane_cubemap_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "input_layout" },
-    { "output_layout", "Output video layout format",         OFFSET(output_layout),    AV_OPT_TYPE_INT,  {.i64 = LAYOUT_CUBEMAP_32 }, 0, LAYOUT_N - 1,  .flags = FLAGS, "output_layout" },
-    { "cubemap",             NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP },             0, 0, FLAGS, "output_layout" },
-    { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "output_layout" },
-    { "cubemap_180",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_180 },         0, 0, FLAGS, "output_layout" },
-    { "plane_poles",         NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES },         0, 0, FLAGS, "output_layout" },
-    { "plane_poles_6",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES_6 },       0, 0, FLAGS, "output_layout" },
-    { "plane_poles_cubemap", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_POLES_CUBEMAP }, 0, 0, FLAGS, "output_layout" },
-    { "plane_cubemap",       NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_CUBEMAP },       0, 0, FLAGS, "output_layout" },
-    { "plane_cubemap_32",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_PLANE_CUBEMAP_32 },    0, 0, FLAGS, "output_layout" },
+    { "input_layout", "Stereo layout input format",         OFFSET(input_layout),    AV_OPT_TYPE_INT,  {.i64 = LAYOUT_CUBEMAP_360AB }, 0, LAYOUT_N - 1,  .flags = FLAGS, "input_layout" },
+    // { "cubemap180l",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_180L },      0, 0, FLAGS, "input_layout" }, FIXME not supported yet
+    { "cubemap360l",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_360L },      0, 0, FLAGS, "input_layout" },
+    // { "cubemap180ab",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_180AB },    0, 0, FLAGS, "input_layout" }, FIXME not supported yet
+    { "cubemap360ab",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_360AB },    0, 0, FLAGS, "input_layout" },
+    { "output_layout", "Stereo layout output format",         OFFSET(output_layout),    AV_OPT_TYPE_INT,  {.i64 = LAYOUT_CUBEMAP_180AB }, 0, LAYOUT_N - 1,  .flags = FLAGS, "output_layout" },
+    { "cubemap180l",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_180L },      0, 0, FLAGS, "output_layout" },
+    // { "cubemap360l",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_360L },      0, 0, FLAGS, "output_layout" }, FIXME not supported yet
+    { "cubemap180ab",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_180AB },    0, 0, FLAGS, "output_layout" },
+    // { "cubemap360ab",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_360AB },    0, 0, FLAGS, "output_layout" }, FIXME not supported yet
     { NULL }
 };
 
@@ -195,7 +182,6 @@ static int config_input(AVFilterLink *inlink)
         outlink->h
        );
 
-
     cr->nb_planes = av_pix_fmt_count_planes(inlink->format);
     av_log(ctx, AV_LOG_VERBOSE, "planes count: %d.\n", cr->nb_planes);
 
@@ -220,98 +206,151 @@ static int config_input(AVFilterLink *inlink)
     cr->chroma[2].x = desc->log2_chroma_w;
     cr->chroma[2].y = desc->log2_chroma_h;
 
-    // LEFT RIGHT
-    // left eye = right
-    i = 0;
-    cr->sprites[i].i_x = 0;
-    cr->sprites[i].i_y = 0;
-    cr->sprites[i].o_x = outlink->w / 6 * 4;
-    cr->sprites[i].o_y = 0;
-    cr->sprites[i].w = inlink->w / 6;
-    cr->sprites[i].h = inlink->h / 4;
+    switch (cr->input_layout) {
+    case LAYOUT_CUBEMAP_360L:
+        // LEFT RIGHT
+        // left eye = right
+        i = 0;
+        cr->sprites[i].i_x = 0;
+        cr->sprites[i].i_y = 0;
+        cr->sprites[i].o_x = outlink->w / 6 * 4;
+        cr->sprites[i].o_y = 0;
+        cr->sprites[i].w = inlink->w / 6;
+        cr->sprites[i].h = inlink->h / 2;
 
-    // left eye = left
-    i++;
-    cr->sprites[i].i_x = inlink->w / 2;
-    cr->sprites[i].i_y = 0;
-    cr->sprites[i].o_x = outlink->w / 6 * 5;
-    cr->sprites[i].o_y = 0;
-    cr->sprites[i].w = inlink->w / 6;
-    cr->sprites[i].h = inlink->h / 4;
+        // left eye = left
+        i++;
+        cr->sprites[i].i_x = inlink->w / 2;
+        cr->sprites[i].i_y = 0;
+        cr->sprites[i].o_x = outlink->w / 6 * 5;
+        cr->sprites[i].o_y = 0;
+        cr->sprites[i].w = inlink->w / 6;
+        cr->sprites[i].h = inlink->h / 2;
 
-    // right eye = right
-    i++;
-    cr->sprites[i].i_x = 0;
-    cr->sprites[i].i_y = inlink->h / 2;
-    cr->sprites[i].o_x = outlink->w / 6 * 4;
-    cr->sprites[i].o_y = outlink->h / 2;
-    cr->sprites[i].w = inlink->w / 6;
-    cr->sprites[i].h = inlink->h / 4;
+        // TOP BOTTOM
+        // left eye = bottom
+        i++;
+        cr->sprites[i].i_x = 0;
+        cr->sprites[i].i_y = inlink->h / 2;
+        cr->sprites[i].o_x = outlink->w / 3;
+        cr->sprites[i].o_y = 0;
+        cr->sprites[i].w = inlink->w / 3;
+        cr->sprites[i].h = inlink->h / 4;
 
-    // right eye = left
-    i++;
-    cr->sprites[i].i_x = inlink->w / 2;
-    cr->sprites[i].i_y = inlink->h / 2;
-    cr->sprites[i].o_x = outlink->w / 6 * 5;
-    cr->sprites[i].o_y = outlink->h / 2;
-    cr->sprites[i].w = inlink->w / 6;
-    cr->sprites[i].h = inlink->h / 4;
+        // left eye = top
+        i++;
+        cr->sprites[i].i_x = inlink->w / 3 * 2;
+        cr->sprites[i].i_y = inlink->h / 4;
+        cr->sprites[i].o_x = outlink->w / 3;
+        cr->sprites[i].o_y = outlink->h / 2;
+        cr->sprites[i].w = inlink->w / 3;
+        cr->sprites[i].h = inlink->h / 4;
 
-    // TOP BOTTOM
-    // left eye = bottom
-    i++;
-    cr->sprites[i].i_x = 0;
-    cr->sprites[i].i_y = inlink->h / 4;
-    cr->sprites[i].o_x = outlink->w / 3;
-    cr->sprites[i].o_y = 0;
-    cr->sprites[i].w = inlink->w / 3;
-    cr->sprites[i].h = inlink->h / 8;
+        // FACE
+        // left eye = face
+        i++;
+        cr->sprites[i].i_x = inlink->w / 3;
+        cr->sprites[i].i_y = inlink->h / 2;
+        cr->sprites[i].o_x = 0;
+        cr->sprites[i].o_y = 0;
+        cr->sprites[i].w = inlink->w / 3;
+        cr->sprites[i].h = inlink->h / 2;         
+        break;
+    case LAYOUT_CUBEMAP_360AB:
+    default:
+        // LEFT RIGHT
+        // left eye = right
+        i = 0;
+        cr->sprites[i].i_x = 0;
+        cr->sprites[i].i_y = 0;
+        cr->sprites[i].o_x = outlink->w / 6 * 4;
+        cr->sprites[i].o_y = 0;
+        cr->sprites[i].w = inlink->w / 6;
+        cr->sprites[i].h = inlink->h / 4;
 
-    // left eye = top
-    i++;
-    cr->sprites[i].i_x = inlink->w / 3 * 2;
-    cr->sprites[i].i_y = inlink->h / 8;
-    cr->sprites[i].o_x = outlink->w / 3;
-    cr->sprites[i].o_y = outlink->h / 4;
-    cr->sprites[i].w = inlink->w / 3;
-    cr->sprites[i].h = inlink->h / 8;
+        // left eye = left
+        i++;
+        cr->sprites[i].i_x = inlink->w / 2;
+        cr->sprites[i].i_y = 0;
+        cr->sprites[i].o_x = outlink->w / 6 * 5;
+        cr->sprites[i].o_y = 0;
+        cr->sprites[i].w = inlink->w / 6;
+        cr->sprites[i].h = inlink->h / 4;
 
-    // right eye = bottom
-    i++;
-    cr->sprites[i].i_x = 0;
-    cr->sprites[i].i_y = inlink->h / 4 * 3;
-    cr->sprites[i].o_x = outlink->w / 3;
-    cr->sprites[i].o_y = outlink->h / 2;
-    cr->sprites[i].w = inlink->w / 3;
-    cr->sprites[i].h = inlink->h / 8;
+        // right eye = right
+        i++;
+        cr->sprites[i].i_x = 0;
+        cr->sprites[i].i_y = inlink->h / 2;
+        cr->sprites[i].o_x = outlink->w / 6 * 4;
+        cr->sprites[i].o_y = outlink->h / 2;
+        cr->sprites[i].w = inlink->w / 6;
+        cr->sprites[i].h = inlink->h / 4;
 
-    // right eye = top
-    i++;
-    cr->sprites[i].i_x = inlink->w / 3 * 2;
-    cr->sprites[i].i_y = inlink->h / 8 * 5;
-    cr->sprites[i].o_x = outlink->w / 3;
-    cr->sprites[i].o_y = outlink->h / 4 * 3;
-    cr->sprites[i].w = inlink->w / 3;
-    cr->sprites[i].h = inlink->h / 8;
+        // right eye = left
+        i++;
+        cr->sprites[i].i_x = inlink->w / 2;
+        cr->sprites[i].i_y = inlink->h / 2;
+        cr->sprites[i].o_x = outlink->w / 6 * 5;
+        cr->sprites[i].o_y = outlink->h / 2;
+        cr->sprites[i].w = inlink->w / 6;
+        cr->sprites[i].h = inlink->h / 4;
 
-    // FACE
-    // right eye = face
-    i++;
-    cr->sprites[i].i_x = inlink->w / 3;
-    cr->sprites[i].i_y = inlink->h / 4;
-    cr->sprites[i].o_x = 0;
-    cr->sprites[i].o_y = 0;
-    cr->sprites[i].w = inlink->w / 3;
-    cr->sprites[i].h = inlink->h / 4;
+        // TOP BOTTOM
+        // left eye = bottom
+        i++;
+        cr->sprites[i].i_x = 0;
+        cr->sprites[i].i_y = inlink->h / 4;
+        cr->sprites[i].o_x = outlink->w / 3;
+        cr->sprites[i].o_y = 0;
+        cr->sprites[i].w = inlink->w / 3;
+        cr->sprites[i].h = inlink->h / 8;
 
-    // right eye = face
-    i++;
-    cr->sprites[i].i_x = inlink->w / 3;
-    cr->sprites[i].i_y = inlink->h / 4 * 3;
-    cr->sprites[i].o_x = 0;
-    cr->sprites[i].o_y = outlink->h / 2;
-    cr->sprites[i].w = inlink->w / 3;
-    cr->sprites[i].h = inlink->h / 4;
+        // left eye = top
+        i++;
+        cr->sprites[i].i_x = inlink->w / 3 * 2;
+        cr->sprites[i].i_y = inlink->h / 8;
+        cr->sprites[i].o_x = outlink->w / 3;
+        cr->sprites[i].o_y = outlink->h / 4;
+        cr->sprites[i].w = inlink->w / 3;
+        cr->sprites[i].h = inlink->h / 8;
+
+        // right eye = bottom
+        i++;
+        cr->sprites[i].i_x = 0;
+        cr->sprites[i].i_y = inlink->h / 4 * 3;
+        cr->sprites[i].o_x = outlink->w / 3;
+        cr->sprites[i].o_y = outlink->h / 2;
+        cr->sprites[i].w = inlink->w / 3;
+        cr->sprites[i].h = inlink->h / 8;
+
+        // right eye = top
+        i++;
+        cr->sprites[i].i_x = inlink->w / 3 * 2;
+        cr->sprites[i].i_y = inlink->h / 8 * 5;
+        cr->sprites[i].o_x = outlink->w / 3;
+        cr->sprites[i].o_y = outlink->h / 4 * 3;
+        cr->sprites[i].w = inlink->w / 3;
+        cr->sprites[i].h = inlink->h / 8;
+
+        // FACE
+        // left eye = face
+        i++;
+        cr->sprites[i].i_x = inlink->w / 3;
+        cr->sprites[i].i_y = inlink->h / 4;
+        cr->sprites[i].o_x = 0;
+        cr->sprites[i].o_y = 0;
+        cr->sprites[i].w = inlink->w / 3;
+        cr->sprites[i].h = inlink->h / 4;
+
+        // right eye = face
+        i++;
+        cr->sprites[i].i_x = inlink->w / 3;
+        cr->sprites[i].i_y = inlink->h / 4 * 3;
+        cr->sprites[i].o_x = 0;
+        cr->sprites[i].o_y = outlink->h / 2;
+        cr->sprites[i].w = inlink->w / 3;
+        cr->sprites[i].h = inlink->h / 4;  
+    }
 
     cr->nb_sprites = i + 1;
     av_log(ctx, AV_LOG_VERBOSE, "sprites count: %d.\n", cr->nb_sprites);
