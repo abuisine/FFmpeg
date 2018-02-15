@@ -24,8 +24,8 @@
 #include "video.h"
 #include <stdio.h>
 
-#include "transform360/VideoFrameTransformHandler.h"
-#include "transform360/VideoFrameTransformHelper.h"
+#include "Transform360/Library/VideoFrameTransformHandler.h"
+#include "Transform360/Library/VideoFrameTransformHelper.h"
 
 static const char *const var_names[] = {
     "out_w",  "ow",
